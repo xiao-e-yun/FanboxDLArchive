@@ -10,7 +10,7 @@ use std::{
 
 #[derive(Debug, Clone, Parser, Default)]
 pub struct Config {
-    /// Your fanbox dl path
+    /// Your fanbox dl archive path
     #[clap(env = "INPUT")]
     input: PathBuf,
     /// Which you path want to save

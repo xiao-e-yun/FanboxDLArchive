@@ -19,7 +19,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     info!("{}", style("Fanbox DL Archive").bold().dim());
     info!("");
     info!("==================================");
-    info!("PostArchiver version: v{}",style(format!("v{}",VERSION)).bold());
+    info!("PostArchiver version: {}",style(format!("v{}",VERSION)).bold());
     info!("Overwrite: {}",style(config.overwrite()).bold());
     info!("Transform: {}",style(config.transform()).bold());
     info!("Input: {}",style(config.input().display()).bold());

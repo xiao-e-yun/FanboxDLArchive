@@ -38,14 +38,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let creators = get_creators(&config).await?;
     display_creators(&creators);
 
+    let platform = manager.import_platform("fanbox-dl".to_string())?;
+
     info!("Syncing Creator List"); 
-    let authors = sync_creators(&mut manager, creators)?;
+    let authors = sync_creators(&mut manager, creators, platform)?;
 
     info!("Resolve Creators Post");
-    for (author, path) in authors {
-        info!("* {}", style(&author.name).bold());
+    for (_, path) in authors {
+        info!("* {}", style(&path.display()).bold());
         info!("resolving");
-        let posts = get_posts(path, author.id).await?;
+        let posts = get_posts(path, platform).await?;
         info!("");
 
         if !posts.is_empty() {

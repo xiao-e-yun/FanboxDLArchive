@@ -1,54 +1,79 @@
 pub mod file;
 
-use std::{borrow::Cow, collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use crate::config::{Config, TransformMethod};
 use chrono::{DateTime, Utc};
 use console::style;
 use file::FanboxDLFileMeta;
 use indicatif::{ProgressBar, ProgressStyle};
-use log::{debug, error, info, warn};
+use log::{debug, info, warn};
 use post_archiver::{
-    importer::{
-        file_meta::{ImportFileMetaMethod, UnsyncFileMeta},
-        post::UnsyncPost,
-        UnsyncContent,
-    },
-    manager::{PostArchiverConnection, PostArchiverManager},
-    AuthorId,
+    importer::{post::UnsyncPost, UnsyncContent, UnsyncFileMeta},
+    manager::PostArchiverManager,
+    PlatformId,
 };
 use rusqlite::Connection;
-use serde_json::json;
 use tokio::{
     fs::{self, copy, create_dir_all, hard_link, rename},
-    sync::Semaphore, task::JoinSet,
+    sync::Semaphore,
+    task::JoinSet,
 };
 
 pub async fn get_posts(
     path: PathBuf,
-    author: AuthorId,
-) -> Result<Vec<UnsyncPost>, Box<dyn std::error::Error>> {
-    let groups = read_fanbox_dl_archive(path).await?;
+    platform: PlatformId,
+) -> Result<Vec<(UnsyncPost, HashMap<String, PathBuf>)>, Box<dyn std::error::Error>> {
+    fn to_file_metas(files: &[(UnsyncFileMeta, PathBuf)]) -> Vec<UnsyncContent> {
+        files
+            .iter()
+            .map(|(file, _)| UnsyncContent::File(file.clone()))
+            .collect()
+    }
+
+    fn to_file_map(files: Vec<(UnsyncFileMeta, PathBuf)>) -> HashMap<String, PathBuf> {
+        files
+            .into_iter()
+            .map(|(file, path)| (file.filename, path))
+            .collect()
+    }
+
+    let groups = read_fanbox_dl_archive(path.clone()).await?;
+
     Ok(groups
         .into_iter()
-        .map(|group| {
-            let post = UnsyncPost::new(author);
-            match group {
-                FanboxDLPost::Ungroup(files) => post
-                    .title("Fanbox archive".to_string())
-                    .content(files.into_iter().map(UnsyncContent::file).collect()),
-                FanboxDLPost::GroupByPlan(plan, files) => post
-                    .title(format!("{}yen fanbox archive", plan))
-                    .content(files.into_iter().map(UnsyncContent::file).collect()),
-                FanboxDLPost::GroupByPost(date, name, files) => post
-                    .title(name)
-                    .content(files.into_iter().map(UnsyncContent::file).collect())
-                    .updated(date)
-                    .published(date),
-            }
-            .tags(vec!["fanbox-dl".to_string()])
+        .map(|group| match group {
+            FanboxDLPost::Ungroup(files) => (
+                UnsyncPost::new(
+                    platform,
+                    path.to_string_lossy().to_string(),
+                    "Fanbox archive".to_string(),
+                    to_file_metas(&files),
+                ),
+                to_file_map(files),
+            ),
+            FanboxDLPost::GroupByPlan(plan, files) => (
+                UnsyncPost::new(
+                    platform,
+                    format!("{} - {}yen", path.to_string_lossy(), plan),
+                    "{}yen fanbox archive".to_string(),
+                    to_file_metas(&files),
+                ),
+                to_file_map(files),
+            ),
+            FanboxDLPost::GroupByPost(date, name, files) => (
+                UnsyncPost::new(
+                    platform,
+                    format!("{} - {}", path.to_string_lossy(), name),
+                    name,
+                    to_file_metas(&files),
+                )
+                .published(date)
+                .updated(date),
+                to_file_map(files),
+            ),
         })
-        .filter(|post| post.content.len() > 0)
+        .filter(|(post, _)| !post.content.is_empty())
         .collect())
 }
 
@@ -101,7 +126,7 @@ pub async fn read_fanbox_dl_archive(
     async fn read_dir_files(
         path: PathBuf,
         level: usize,
-    ) -> Result<Vec<UnsyncFileMeta>, Box<dyn std::error::Error>> {
+    ) -> Result<Vec<(UnsyncFileMeta, PathBuf)>, Box<dyn std::error::Error>> {
         let mut list = vec![];
 
         if level > MAX_DEPTH {
@@ -141,31 +166,31 @@ pub async fn read_fanbox_dl_archive(
 }
 
 pub enum FanboxDLPost {
-    Ungroup(Vec<UnsyncFileMeta>),
-    GroupByPlan(u32, Vec<UnsyncFileMeta>),
-    GroupByPost(DateTime<Utc>, String, Vec<UnsyncFileMeta>),
+    Ungroup(Vec<(UnsyncFileMeta, PathBuf)>),
+    GroupByPlan(u32, Vec<(UnsyncFileMeta, PathBuf)>),
+    GroupByPost(DateTime<Utc>, String, Vec<(UnsyncFileMeta, PathBuf)>),
 }
 
 pub async fn sync_posts(
     manager: &mut PostArchiverManager<Connection>,
     config: &Config,
-    posts: Vec<UnsyncPost>,
+    posts: Vec<(UnsyncPost, HashMap<String, PathBuf>)>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let main_style =
-        ProgressStyle::with_template(" {prefix:.bold} {bar} {wide_msg}").unwrap();
-    let secondly_style = ProgressStyle::with_template("   * {prefix:.bold} {wide_msg:.bold.dim}").unwrap();
+    let main_style = ProgressStyle::with_template(" {prefix:.bold} {bar} {wide_msg}").unwrap();
+    let secondly_style =
+        ProgressStyle::with_template("   * {prefix:.bold} {wide_msg:.bold.dim}").unwrap();
 
     let multi = config.multi();
     let total = multi.add(ProgressBar::new(posts.len() as u64));
 
     let mut join_set = JoinSet::new();
     let semaphores = Arc::new(Semaphore::new(config.limit()));
-    for post in posts {
+    for (post, files) in posts {
         let manager = manager.transaction()?;
         let post_pb = multi.add(
             ProgressBar::new(post.content.len() as u64 + 1)
                 .with_style(main_style.clone())
-                .with_prefix(post.title.clone())
+                .with_prefix(post.title.clone()),
         );
 
         post_pb.set_message("syncing");
@@ -174,41 +199,37 @@ pub async fn sync_posts(
             ProgressBar::new(0)
                 .with_style(secondly_style.clone())
                 .with_message("syncing")
-                .with_prefix("post")
+                .with_prefix("post"),
         );
-        let (_, files) = post.sync(&manager)?;
+        let (_, files) = post.sync(&manager, files)?;
         post_pb.inc(1);
 
-        if let Some((path,_)) = files.first() {
+        if let Some((path, _)) = files.first() {
             create_dir_all(path.parent().unwrap()).await.ok();
         }
 
         post_pb.set_message("transforming");
         let transform = config.transform();
-        for (output, method) in files {
+        for (target, source) in files {
             let post_pb = post_pb.clone();
             let semaphores = semaphores.clone();
-            let filename = output.file_name().unwrap().to_string_lossy().to_string();
+            let filename = target.file_name().unwrap().to_string_lossy().to_string();
             let file_pb = multi.insert_after(
                 &sync_pb,
                 ProgressBar::new(0)
                     .with_style(secondly_style.clone())
                     .with_prefix(filename)
-                    .with_message("transforming")
+                    .with_message("transforming"),
             );
-            
+
             join_set.spawn(async move {
                 let _semaphore = semaphores.acquire().await.unwrap();
                 file_pb.tick();
 
-                let ImportFileMetaMethod::File(input) = method else {
-                    unreachable!()
-                };
-
                 let error = match transform {
-                    TransformMethod::Copy => copy(input, output).await.err(),
-                    TransformMethod::Move => rename(input, output).await.err(),
-                    TransformMethod::Hardlink => hard_link(input, output).await.err()
+                    TransformMethod::Copy => copy(source, target).await.err(),
+                    TransformMethod::Move => rename(source, target).await.err(),
+                    TransformMethod::Hardlink => hard_link(source, target).await.err(),
                 };
 
                 match error {

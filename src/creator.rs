@@ -2,7 +2,11 @@ use std::{error::Error, fs, path::PathBuf};
 
 use console::style;
 use log::{debug, info};
-use post_archiver::{importer::UnsyncAuthor, manager::PostArchiverManager, Author, Link};
+use post_archiver::{
+    importer::{UnsyncAlias, UnsyncAuthor},
+    manager::PostArchiverManager,
+    AuthorId, PlatformId,
+};
 use rusqlite::Connection;
 
 use crate::config::Config;
@@ -56,22 +60,18 @@ pub fn display_creators(creators: &[(String, PathBuf)]) {
 pub fn sync_creators(
     manager: &mut PostArchiverManager<Connection>,
     creators: Vec<(String, PathBuf)>,
-) -> Result<Vec<(Author, PathBuf)>, Box<dyn Error>> {
+    platform: PlatformId,
+) -> Result<Vec<(AuthorId, PathBuf)>, Box<dyn Error>> {
     let mut list = vec![];
     let manager = manager.transaction()?;
 
     for (creator, path) in creators {
-        let alias = format!("fanbox:{}", creator);
-
-        let author = match manager.check_author(&[alias.clone()])? {
-            Some(id) => manager.get_author(&id),
-            None => {
-                let link = Link::new("fanbox", &format!("https://{}.fanbox.cc/", creator));
-                UnsyncAuthor::new(creator.to_string())
-                    .alias(vec![alias])
-                    .links(vec![link])
-                    .sync(&manager)
-            }
+        let author = match manager.find_author(&[(creator.as_str(), platform)])? {
+            Some(id) => Ok(id),
+            None => UnsyncAuthor::new(creator.to_string())
+                .aliases(vec![UnsyncAlias::new(platform, creator.clone())
+                    .link(format!("https://{}.fanbox.cc/", creator))])
+                .sync(&manager),
         }?;
 
         list.push((author, path));

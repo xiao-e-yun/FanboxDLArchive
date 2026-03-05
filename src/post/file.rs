@@ -29,7 +29,7 @@ impl FanboxDLFileMeta for UnsyncFileMeta<PathBuf> {
             filename,
             mime,
             extra,
-            data: path
+            data: path,
         }
     }
 }

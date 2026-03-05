@@ -19,11 +19,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     info!("{}", style("Fanbox DL Archive").bold().dim());
     info!("");
     info!("==================================");
-    info!("PostArchiver version: {}",style(format!("v{}",VERSION)).bold());
-    info!("Overwrite: {}",style(config.overwrite()).bold());
-    info!("Transform: {}",style(config.transform()).bold());
-    info!("Input: {}",style(config.input().display()).bold());
-    info!("Output: {}",style(config.output().display()).bold());
+    info!(
+        "PostArchiver version: {}",
+        style(format!("v{}", VERSION)).bold()
+    );
+    info!("Overwrite: {}", style(config.overwrite()).bold());
+    info!("Transform: {}", style(config.transform()).bold());
+    info!("Input: {}", style(config.input().display()).bold());
+    info!("Output: {}", style(config.output().display()).bold());
     info!("==================================");
 
     if !config.output().exists() {
@@ -40,7 +43,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let platform = manager.import_platform("fanbox-dl".to_string())?;
 
-    info!("Syncing Creator List"); 
+    info!("Syncing Creator List");
     let authors = sync_creators(&mut manager, creators, platform)?;
 
     info!("Resolve Creators Post");

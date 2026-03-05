@@ -1,4 +1,4 @@
-use clap::{arg, Parser, ValueEnum};
+use clap::{Parser, ValueEnum};
 use clap_verbosity_flag::{InfoLevel, Verbosity};
 use dotenv::dotenv;
 use indicatif::MultiProgress;
@@ -47,7 +47,7 @@ impl Config {
     pub fn init_logger(&self) {
         let level = self.verbose.log_level_filter();
         let logger = env_logger::Builder::new()
-            .filter_level(level.clone())
+            .filter_level(level)
             .format_target(false)
             .build();
 
@@ -69,9 +69,6 @@ impl Config {
     pub fn output(&self) -> &PathBuf {
         &self.output
     }
-    pub fn limit(&self) -> usize {
-        self.limit
-    }
 
     pub fn filter_creator(&self, creator: &String) -> bool {
         let mut accept = true;
@@ -91,7 +88,6 @@ pub enum TransformMethod {
     #[default]
     Copy,
     Move,
-    Hardlink,
 }
 
 impl Display for TransformMethod {
@@ -99,7 +95,6 @@ impl Display for TransformMethod {
         match self {
             TransformMethod::Copy => write!(f, "Copy"),
             TransformMethod::Move => write!(f, "Move"),
-            TransformMethod::Hardlink => write!(f, "Hardlink"),
         }
     }
 }

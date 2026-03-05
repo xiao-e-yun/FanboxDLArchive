@@ -66,7 +66,7 @@ pub fn sync_creators(
     let manager = manager.transaction()?;
 
     for (creator, path) in creators {
-        let author = match manager.find_author(&[(creator.as_str(), platform)])? {
+        let author = match manager.find_author_by_alias(&creator, platform)? {
             Some(id) => Ok(id),
             None => UnsyncAuthor::new(creator.to_string())
                 .aliases(vec![UnsyncAlias::new(platform, creator.clone())

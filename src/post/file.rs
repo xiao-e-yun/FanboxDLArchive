@@ -8,11 +8,11 @@ pub trait FanboxDLFileMeta
 where
     Self: Sized,
 {
-    fn from_path(path: PathBuf) -> (Self, PathBuf);
+    fn from_path(path: PathBuf) -> Self;
 }
 
-impl FanboxDLFileMeta for UnsyncFileMeta {
-    fn from_path(path: PathBuf) -> (Self, PathBuf) {
+impl FanboxDLFileMeta for UnsyncFileMeta<PathBuf> {
+    fn from_path(path: PathBuf) -> Self {
         let filename = path.file_name().unwrap().to_string_lossy().to_string();
         let mime = MimeGuess::from_path(&path)
             .first_or_octet_stream()
@@ -25,10 +25,11 @@ impl FanboxDLFileMeta for UnsyncFileMeta {
             extra.insert("height".to_string(), json!(size.height));
         }
 
-        (Self {
+        Self {
             filename,
             mime,
             extra,
-        }, path)
+            data: path
+        }
     }
 }

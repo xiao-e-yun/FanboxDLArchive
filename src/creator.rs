@@ -14,7 +14,7 @@ use crate::config::Config;
 pub async fn get_creators(config: &Config) -> Result<Vec<(String, PathBuf)>, Box<dyn Error>> {
     info!("Checking creators");
     let mut creators = vec![];
-    for entry in fs::read_dir(&config.input())?.flat_map(|e| e) {
+    for entry in fs::read_dir(config.input())?.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
         if name.starts_with('.') {
             debug!(" ignoring: {}", entry.path().display());
@@ -43,8 +43,8 @@ pub async fn get_creators(config: &Config) -> Result<Vec<(String, PathBuf)>, Box
 
 pub fn display_creators(creators: &[(String, PathBuf)]) {
     if log::log_enabled!(log::Level::Info) {
-        let mut creators: Vec<String> = creators.into_iter().map(|(c, _)| c.clone()).collect();
-        creators.sort_by(|a, b| a.cmp(&b));
+        let mut creators: Vec<String> = creators.iter().map(|(c, _)| c.clone()).collect();
+        creators.sort();
 
         info!("== Creator =============");
 

@@ -41,14 +41,14 @@ Every fanbox-dl layout is split into one post per fanbox post:
 Files that don't match (e.g. names truncated with `...`) go into a single "Fanbox archive" post per creator.
 Posts with the same date and title are merged, as fanbox-dl paths carry no post id.
 
-## Upgrading from v0.1
+## Upgrading from v0.2
 
-v0.2 uses post-archiver 0.6. Before running it on an existing archive, upgrade the
+v0.3 uses post-archiver 0.6. Before running it on an existing archive, upgrade the
 archive database with [post-archiver-bridge](https://github.com/xiao-e-yun/PostArchiver) (v0.5 -> v0.6).
 
 Removed options: `--transform` (move mode), `--overwrite` and `--limit`.
 
-v0.1 put all files of a creator (or plan) into one post. v0.2 splits them into separate posts
+v0.2 put all files of a creator (or plan) into one post. v0.3 splits them into separate posts
 but does not delete the old one, so the files would show up twice. Importing into a new
 output folder is recommended.
 

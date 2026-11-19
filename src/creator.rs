@@ -1,41 +1,29 @@
 use std::{error::Error, fs, path::PathBuf};
 
-use console::style;
 use log::{debug, info};
-use post_archiver::{
-    importer::{UnsyncAlias, UnsyncAuthor},
-    manager::PostArchiverManager,
-    AuthorId, PlatformId,
-};
-use rusqlite::Connection;
 
 use crate::config::Config;
 
-pub async fn get_creators(config: &Config) -> Result<Vec<(String, PathBuf)>, Box<dyn Error>> {
+pub fn get_creators(config: &Config) -> Result<Vec<(String, PathBuf)>, Box<dyn Error>> {
     info!("Checking creators");
     let mut creators = vec![];
     for entry in fs::read_dir(config.input())?.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with('.') {
+        if name.starts_with('.') || !entry.file_type()?.is_dir() {
             debug!(" ignoring: {}", entry.path().display());
             continue;
         }
 
-        let filetype = entry.file_type()?;
-        if !filetype.is_dir() {
-            debug!(" ignoring: {}", entry.path().display());
-            continue;
-        };
-
         creators.push((name, entry.path()));
     }
+    creators.sort();
 
     let total = creators.len();
-    info!("{} {}", total, style("total").bold());
     creators.retain(|(c, _)| config.filter_creator(c));
     let filtered = creators.len();
-    info!("{} {}", filtered, style("included"));
-    info!("{} {}", total - filtered, style("excluded").dim());
+    info!("Total: {total} creators");
+    info!("Excluded: {} creators", total - filtered);
+    info!("Included: {filtered} creators");
     info!("");
 
     Ok(creators)
@@ -43,40 +31,11 @@ pub async fn get_creators(config: &Config) -> Result<Vec<(String, PathBuf)>, Box
 
 pub fn display_creators(creators: &[(String, PathBuf)]) {
     if log::log_enabled!(log::Level::Info) {
-        let mut creators: Vec<String> = creators.iter().map(|(c, _)| c.clone()).collect();
-        creators.sort();
-
         info!("== Creator =============");
-
-        for creator in creators.iter() {
-            info!(" {}", creator);
+        for (creator, _) in creators {
+            info!(" {creator}");
         }
-
         info!("========================");
         info!("");
     }
-}
-
-pub fn sync_creators(
-    manager: &mut PostArchiverManager<Connection>,
-    creators: Vec<(String, PathBuf)>,
-    platform: PlatformId,
-) -> Result<Vec<(AuthorId, PathBuf)>, Box<dyn Error>> {
-    let mut list = vec![];
-    let manager = manager.transaction()?;
-
-    for (creator, path) in creators {
-        let author = match manager.find_author_by_alias(&creator, platform)? {
-            Some(id) => Ok(id),
-            None => UnsyncAuthor::new(creator.to_string())
-                .aliases(vec![UnsyncAlias::new(platform, creator.clone())
-                    .link(format!("https://{}.fanbox.cc/", creator))])
-                .sync(&manager),
-        }?;
-
-        list.push((author, path));
-    }
-
-    manager.commit()?;
-    Ok(list)
 }

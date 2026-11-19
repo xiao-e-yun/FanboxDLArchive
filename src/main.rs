@@ -2,66 +2,60 @@ mod config;
 mod creator;
 mod post;
 
-use std::error::Error;
+use std::{error::Error, process::ExitCode};
 
 use config::Config;
-use console::style;
-use creator::{display_creators, get_creators, sync_creators};
-use log::{info, warn};
-use post::{get_posts, sync_posts};
-use post_archiver::{manager::PostArchiverManager, utils::VERSION};
+use creator::{display_creators, get_creators};
+use log::{error, info};
+use post::{get_posts, import_posts, ImportStats};
+use post_archiver::utils::VERSION;
+use post_archiver_utils::{display_metadata, setup_database};
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<ExitCode, Box<dyn Error>> {
     let config = Config::parse();
-    config.init_logger();
 
-    info!("{}", style("Fanbox DL Archive").bold().dim());
-    info!("");
-    info!("==================================");
-    info!(
-        "PostArchiver version: {}",
-        style(format!("v{}", VERSION)).bold()
-    );
-    info!("Overwrite: {}", style(config.overwrite()).bold());
-    info!("Transform: {}", style(config.transform()).bold());
-    info!("Input: {}", style(config.input().display()).bold());
-    info!("Output: {}", style(config.output().display()).bold());
-    info!("==================================");
+    display_metadata!("Fanbox DL Archive" {
+        "Version": format!("v{}", env!("CARGO_PKG_VERSION")),
+        "PostArchiver Version": format!("v{VERSION}"),
+        "Strategy": config.strategy(),
+        "Whitelist": config.whitelist().join(", "),
+        "Blacklist": config.blacklist().join(", "),
+        "Input": config.input().display(),
+        "Output": config.output().display(),
+    });
 
-    if !config.output().exists() {
-        warn!("Creating output folder");
-        std::fs::create_dir_all(config.output())?;
-    }
+    let mut manager = setup_database(config.output())?;
 
-    info!("Connecting to PostArchiver");
-    let mut manager = PostArchiverManager::open_or_create(config.output())?;
-
-    info!("Loading Creator List");
-    let creators = get_creators(&config).await?;
+    let creators = get_creators(&config)?;
     display_creators(&creators);
 
-    let platform = manager.import_platform("fanbox-dl".to_string())?;
+    let mut total = ImportStats::default();
+    for (creator, path) in creators {
+        info!("* {creator}");
+        let posts = match get_posts(&creator, &path) {
+            Ok(posts) => posts,
+            Err(e) => {
+                error!("Failed to read {}: {e}", path.display());
+                total.failed += 1;
+                continue;
+            }
+        };
+        info!("{} posts found", posts.len());
 
-    info!("Syncing Creator List");
-    let authors = sync_creators(&mut manager, creators, platform)?;
-
-    info!("Resolve Creators Post");
-    for (_, path) in authors {
-        info!("* {}", style(&path.display()).bold());
-        info!("resolving");
-        let posts = get_posts(path, platform).await?;
-        info!("");
-
-        if !posts.is_empty() {
-            info!("{} posts found", style(posts.len()).bold());
-            info!("syncing");
-            sync_posts(&mut manager, &config, posts).await?;
-        }
-
+        let stats = import_posts(&mut manager, &config, posts);
+        total.imported += stats.imported;
+        total.skipped += stats.skipped;
+        total.failed += stats.failed;
         info!("");
     }
 
-    info!("All done!");
-    Ok(())
+    info!(
+        "All done! {} imported, {} skipped, {} failed",
+        total.imported, total.skipped, total.failed
+    );
+    Ok(if total.failed == 0 {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    })
 }

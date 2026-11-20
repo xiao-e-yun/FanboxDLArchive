@@ -11,16 +11,16 @@ pub struct Config {
     /// Your fanbox dl archive path
     #[clap(env = "INPUT")]
     input: PathBuf,
-    /// Which you path want to save
-    #[arg(default_value = "./archive", env = "OUTPUT")]
+    /// Archive directory to save into
+    #[arg(short, long, default_value = "./archive", env = "OUTPUT")]
     output: PathBuf,
     /// Archiving strategy (increment: skip posts whose files are all imported)
     #[arg(long, default_value_t)]
     strategy: Strategy,
-    /// Whitelist of creator IDs
+    /// Only import these creators (folder names under <INPUT>)
     #[arg(short, long, num_args = 0..)]
     whitelist: Vec<String>,
-    /// Blacklist of creator IDs
+    /// Skip these creators (folder names under <INPUT>)
     #[arg(short, long, num_args = 0..)]
     blacklist: Vec<String>,
     #[command(flatten)]

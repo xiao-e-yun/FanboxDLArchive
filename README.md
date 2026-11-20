@@ -5,28 +5,53 @@
 It imports folders downloaded by [fanbox-dl](https://github.com/hareku/fanbox-dl) into PostArchiver.
 
 ```sh
-Usage: fanbox-dl-archive [OPTIONS] <INPUT> [OUTPUT]
+Usage: fanbox-dl-archive [OPTIONS] <INPUT>
 
 Arguments:
-  <INPUT>   Your fanbox dl archive path [env: INPUT=]
-  [OUTPUT]  Which you path want to save [env: OUTPUT=] [default: ./archive]
+  <INPUT>
+          Your fanbox dl archive path
+          
+          [env: INPUT=]
 
 Options:
-      --strategy <STRATEGY>         Archiving strategy (increment: skip posts whose files are all imported) [default: increment]
-  -w, --whitelist [<WHITELIST>...]  Whitelist of creator IDs
-  -b, --blacklist [<BLACKLIST>...]  Blacklist of creator IDs
-  -v, --verbose...                  Increase logging verbosity
-  -q, --quiet...                    Decrease logging verbosity
-  -h, --help                        Print help
+  -o, --output <OUTPUT>
+          Archive directory to save into
+          
+          [env: OUTPUT=]
+          [default: ./archive]
+
+      --strategy <STRATEGY>
+          Archiving strategy (increment: skip posts whose files are all imported)
+          
+          [default: increment]
+
+          Possible values:
+          - increment: Only fetch posts newer than the last run, and skip posts already in the archive
+          - full:      Fetch everything again and re-import posts already in the archive
+
+  -w, --whitelist [<WHITELIST>...]
+          Only import these creators (folder names under <INPUT>)
+
+  -b, --blacklist [<BLACKLIST>...]
+          Skip these creators (folder names under <INPUT>)
+
+  -v, --verbose...
+          Increase logging verbosity
+
+  -q, --quiet...
+          Decrease logging verbosity
+
+  -h, --help
+          Print help (see a summary with '-h')
 ```
 
 Files are always copied into the archive; the input folder is left untouched.
 
 ```sh
-fanbox-dl-archive ./images ./archive -w creator1 creator2
+fanbox-dl-archive ./images --output ./archive -w creator1 creator2
 ```
 
-Put `<INPUT> [OUTPUT]` before `-w`/`-b`, since those options take every value after them.
+Put `<INPUT>` before `-w`/`-b`, since those options take every value after them.
 
 ## Supported layouts
 
